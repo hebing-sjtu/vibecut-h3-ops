@@ -1,0 +1,13 @@
+# Site-specific runbook: holds internal host names, addresses and account
+# details. Kept local on purpose; README.md is the public equivalent.
+RUNBOOK.md
+
+__pycache__/
+*.pyc
+
+# Never let a pack or its outputs into this repo.
+out/
+*.mp4
+*.zip
+runs.jsonl
+probe.csv
