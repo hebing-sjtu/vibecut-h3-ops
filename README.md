@@ -77,11 +77,22 @@ sglang serve \
 
 **起服务的那个 shell 必须先 `export HF_HOME=...`**，否则几十 GB 权重会落到 `~/.cache/huggingface`，砸在系统盘上。
 
-别把 `--model-path` 指向手动下载的子目录：checkpoint 目录映射由 SGLang 自己管，`--model-variant ref2va` 会去挑 `transformer_ref/`。首次启动自己走 Hub 解析，不需要预下载；想先拉好权重就：
+别把 `--model-path` 指向手动下载的子目录：checkpoint 目录映射由 SGLang 自己管，`--model-variant ref2va` 会去挑 `transformer_ref/`。首次启动自己走 Hub 解析，不需要预下载。
+
+想先把权重拉好、把下载的失败模式和起服务的失败模式分开，就：
 
 ```sh
-hf download MiniMaxAI/MiniMax-H3 --include "model_index.json" "Ref2VA/*"
+export HF_TOKEN=hf_...   # 或 hf auth login；匿名请求有限流，几十 GB 会很难受
+
+# 先看会下哪些文件、一共多大，不真下
+hf download MiniMaxAI/MiniMax-H3 \
+  --include "model_index.json" --include "Ref2VA/*" --dry-run
+
+hf download MiniMaxAI/MiniMax-H3 \
+  --include "model_index.json" --include "Ref2VA/*"
 ```
+
+**`--include` 必须每个模式写一次。** 新版 `hf` CLI 是 click 风格，一次 `--include` 只吃一个值，所以 `--include "a" "b"` 会把 `b` 当成位置参数里的文件名，然后报 `Ignoring --include since filenames have been explicitly set`，接着去下一个名字字面是 `b` 的文件并 404。等价的写法是用位置参数的子目录语法：`hf download MiniMaxAI/MiniMax-H3 model_index.json Ref2VA/`。
 
 别加 `--local-dir` —— 那样不进缓存，SGLang 找不到，照样会重下一遍。
 
