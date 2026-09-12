@@ -14,8 +14,8 @@ the only rewrites it will make are ones that land on a file actually on disk:
 
 Dry run by default.
 
-    python3 retarget_uris.py --pack /data/binghe/material/vibecut-h3-female
-    python3 retarget_uris.py --pack /data/binghe/material/vibecut-h3-female --apply
+    python3 retarget_uris.py --pack /data/material/your-pack
+    python3 retarget_uris.py --pack /data/material/your-pack --apply
 """
 
 from __future__ import annotations

@@ -39,7 +39,21 @@ git clone https://github.com/hebing-sjtu/vibecut-h3-ops.git
 }
 ```
 
-输出文件名取请求文件名：`requests/ref2va/01-studio.json` → `out/ref2va/01-studio.mp4`。
+输出文件名取请求文件名：`requests/ref2va/01-studio.json` → `01-studio.mp4`。
+
+## 目录约定
+
+代码、素材、产物、权重建议分四处，互不写入对方。下面的命令都用这套变量：
+
+```sh
+export OPS=/workspace/vibecut-h3-ops              # 本仓库，可随时删了重拉
+export PACK=/data/.../your-pack                   # 收到的素材包
+export OUT=/data/.../your-pack-out                # 生成的 MP4、runs.jsonl、probe.csv
+export HF_HOME=/data/.../models                   # 模型权重缓存
+mkdir -p "$OUT" "$HF_HOME"
+```
+
+`run_pack.py` 的 `--out` 默认是 `<pack>/out/<task>`，也就是写进素材包里面。**建议每次显式传 `--out "$OUT/ref2va"`**，把产物放在包外的兄弟目录：重新解压素材包不会覆盖已经跑出来的镜头，校验包的哈希时也不会把自己的产物算进去。
 
 ## 用法
 
@@ -61,17 +75,25 @@ sglang serve \
 
 80 GB 的卡（H100/H800）装不下纯 Ulysses 的整条 pipeline，官方配方是 4 卡 `--tp-size 2 --ulysses-degree 2`；八张 80 GB 卡就用 `CUDA_VISIBLE_DEVICES` 起两份服务各占四张，端口 30011 / 30012。
 
-别把 `--model-path` 指向手动下载的子目录：checkpoint 目录映射由 SGLang 自己管，`--model-variant ref2va` 会去挑 `transformer_ref/`。
+**起服务的那个 shell 必须先 `export HF_HOME=...`**，否则几十 GB 权重会落到 `~/.cache/huggingface`，砸在系统盘上。
+
+别把 `--model-path` 指向手动下载的子目录：checkpoint 目录映射由 SGLang 自己管，`--model-variant ref2va` 会去挑 `transformer_ref/`。首次启动自己走 Hub 解析，不需要预下载；想先拉好权重就：
+
+```sh
+hf download MiniMaxAI/MiniMax-H3 --include "model_index.json" "Ref2VA/*"
+```
+
+别加 `--local-dir` —— 那样不进缓存，SGLang 找不到，照样会重下一遍。
 
 ### 2. 让请求里的路径对上
 
 `conditions[].uri` 由**服务进程**解析，不是你敲 curl 的那台机器。包的默认 uri 通常指向作者约定的挂载点，解到别处就全是错的。
 
-如果包自带重生成脚本（例如 `source/build_prompt_pack.py --mount-root <pack>`），优先用它，它会把提示词和请求一起重生成。没有的话用这里的：
+如果包自带重生成脚本（例如 `source/build_prompt_pack.py --mount-root "$PACK"`），优先用它，它会把提示词和请求一起重生成。没有的话用这里的：
 
 ```sh
-python3 retarget_uris.py --pack <pack>            # 先看要改什么
-python3 retarget_uris.py --pack <pack> --apply
+python3 "$OPS/retarget_uris.py" --pack "$PACK"            # 先看要改什么
+python3 "$OPS/retarget_uris.py" --pack "$PACK" --apply
 ```
 
 它不需要你提供旧路径。每条 uri 从左往右逐段剥，保留能在新根下找到真实文件的最长后缀，所以只会改写到磁盘上确实存在的路径；`http(s)` 的远端参考原样保留。改完重跑是幂等的。
@@ -79,7 +101,7 @@ python3 retarget_uris.py --pack <pack> --apply
 ### 3. 预检
 
 ```sh
-python3 run_pack.py --pack <pack> --check
+python3 "$OPS/run_pack.py" --pack "$PACK" --check
 ```
 
 逐条确认 `task` 正确、prompt 非空、`t2va` 的 `conditions` 是空数组、每个本地参考文件真读得到，并列出每镜的参考图数量、seed 和 target。**必须是 `0 problem(s)` 再往下走。**
@@ -90,14 +112,16 @@ python3 run_pack.py --pack <pack> --check
 
 ```sh
 # 先挑两镜确认人物
-python3 run_pack.py --pack <pack> --only 01,02 --base-url http://localhost:30011
+python3 "$OPS/run_pack.py" --pack "$PACK" --out "$OUT/ref2va" \
+  --only 01,02 --base-url http://localhost:30011
 
 # 全量；已生成的自动跳过，中断了直接重跑这条
-python3 run_pack.py --pack <pack> \
+python3 "$OPS/run_pack.py" --pack "$PACK" --out "$OUT/ref2va" \
   --base-url http://localhost:30011 --base-url http://localhost:30012
 
 # 单镜重做，换种子
-python3 run_pack.py --pack <pack> --only 05 --force --seed 12345
+python3 "$OPS/run_pack.py" --pack "$PACK" --out "$OUT/ref2va" \
+  --only 05 --force --seed 12345
 ```
 
 `--base-url` 可以重复给。**每个端点同时只有一镜在飞**，这是刻意对齐服务端默认的 `batching_max_size: 1`；要并发就多起服务、`CUDA_VISIBLE_DEVICES` 占不相交的卡。
@@ -109,7 +133,7 @@ python3 run_pack.py --pack <pack> --only 05 --force --seed 12345
 ### 5. 记录实际参数
 
 ```sh
-python3 probe_outputs.py --dir <pack>/out/ref2va
+python3 "$OPS/probe_outputs.py" --dir "$OUT/ref2va"
 ```
 
 ```
